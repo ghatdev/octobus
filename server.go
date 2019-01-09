@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"log"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/mongodb/mongo-go-driver/mongo"
 )
@@ -18,6 +21,15 @@ type Server struct {
 	mongo  *mongo.Client
 }
 
+type Log struct {
+	Key     string
+	Service string
+	Type    string
+	Tag     string
+	Value   string
+	Time    time.Time `json:"_id" bson:"_id"`
+}
+
 func main() {
 	s := Server{}
 	s.Host = ":17000"
@@ -25,6 +37,11 @@ func main() {
 
 	var err error
 	s.mongo, err = mongo.NewClient(s.DBHost)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = s.mongo.Connect(nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -55,5 +72,19 @@ func main() {
 }
 
 func (s *Server) handler(conn net.Conn) {
+	for {
+		ctx := context.Background()
+		l := Log{}
 
+		d := json.NewDecoder(conn)
+		d.Decode(&l)
+
+		c := s.mongo.Database("log").Collection(l.Service)
+		rslt, err := c.InsertOne(ctx, l)
+		if err != nil {
+			log.Printf("error logging log.\n%v", err)
+		}
+
+		log.Printf("log logged: %v\n", rslt.InsertedID)
+	}
 }
