@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -33,7 +34,7 @@ type Log struct {
 func main() {
 	s := Server{}
 	s.Host = ":17000"
-	s.DBHost = "mongodb://localhost:27017"
+	s.DBHost = "mongodb://127.0.0.1:27027"
 
 	var err error
 	s.mongo, err = mongo.NewClient(s.DBHost)
@@ -63,12 +64,14 @@ func main() {
 		os.Exit(0)
 	}()
 
-	conn, err := listener.Accept()
-	if err != nil {
-		log.Println(err)
-	}
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Println(err)
+		}
 
-	go s.handler(conn)
+		go s.handler(conn)
+	}
 }
 
 func (s *Server) handler(conn net.Conn) {
@@ -77,14 +80,25 @@ func (s *Server) handler(conn net.Conn) {
 		l := Log{}
 
 		d := json.NewDecoder(conn)
-		d.Decode(&l)
+		err := d.Decode(&l)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+
+			log.Printf("error receiving log.\n%v", err)
+			continue
+		}
 
 		c := s.mongo.Database("log").Collection(l.Service)
 		rslt, err := c.InsertOne(ctx, l)
 		if err != nil {
 			log.Printf("error logging log.\n%v", err)
+			continue
 		}
 
 		log.Printf("log logged: %v\n", rslt.InsertedID)
 	}
+
+	conn.Close()
 }
