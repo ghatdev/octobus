@@ -70,6 +70,8 @@ func main() {
 			log.Println(err)
 		}
 
+		log.Printf("New client: %v\n", conn.RemoteAddr())
+
 		go s.handler(conn)
 	}
 }
@@ -83,6 +85,7 @@ func (s *Server) handler(conn net.Conn) {
 		err := d.Decode(&l)
 		if err != nil {
 			if err == io.EOF {
+				log.Printf("Client disconnecting: %v\n", conn.RemoteAddr())
 				break
 			}
 
